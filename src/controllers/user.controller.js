@@ -19,7 +19,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
   // 1.
   const { fullName, email, username, password } = req.body;
-  console.log("email: ", email);
+  console.log(req.body)
+  // console.log("email: ", email);
 
   // 2.
   // if (fullName === "") {
@@ -40,7 +41,7 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // 3.
-  const existedUser = User.findOne({
+  const existedUser = await User.findOne({
     $or: [{username}, {email}] // basically inme se koi bhi agar exist krta h toh uska pehla instance (kind of ONLY instance) return ho jaega!
   })
 
@@ -50,8 +51,15 @@ const registerUser = asyncHandler(async (req, res) => {
 
   // 4.
   // express gives us access to req.body - similarly since we have now added multer middleware in our route - it gives us access to req.files
+  console.log(req.files)
   const avatarLocalPath = req.files?.avatar[0]?.path // first object le rhe h kyunki agar voh mila (optionally use kr rhe h to avoid errors) toh hume uska path jo multer ne upload kra h voh mil jaega!
-  const coverImageLocalPath = req.files?.coverImage[0]?.path
+  // const coverImageLocalPath = req.files?.coverImage[0]?.path
+
+  // to resolve scope issues of coverImageLocalPath
+  let coverImageLocalPath
+  if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
+    coverImageLocalPath = req.files?.coverImage[0]?.path
+  }
 
   if(!avatarLocalPath) {
     throw new ApiError(400, "Avatar is required!")
