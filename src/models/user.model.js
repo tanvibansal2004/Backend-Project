@@ -89,4 +89,4 @@ userSchema.methods.generateRefreshToken = function () {
   );
 };
 
-export const User = mongoose.model("User", userSchema);
+export const User = mongoose.model("User", userSchema); // this User can directly contact or call our mongodb as many times as we want on our behalf because we/ve made it through mongoose.
