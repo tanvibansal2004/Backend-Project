@@ -60,7 +60,7 @@ userSchema.pre("save", async function (next) {
 
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
-}; // we need methoda because we need to check whether the pswd is correct or wrong since we have stored encrypted pswd but our user will enter plain text pswd only!
+}; // we need methods because we need to check whether the pswd is correct or wrong since we have stored encrypted pswd but our user will enter plain text pswd only!
 
 userSchema.methods.generateAccessToken = function () {
   jwt.sign(
