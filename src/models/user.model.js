@@ -63,7 +63,7 @@ userSchema.methods.isPasswordCorrect = async function (password) {
 }; // we need methods because we need to check whether the pswd is correct or wrong since we have stored encrypted pswd but our user will enter plain text pswd only!
 
 userSchema.methods.generateAccessToken = function () {
-  jwt.sign(
+  return jwt.sign(
     {
       // yeh saara payload h!
       _id: this._id, // we get these from our DB only, usme stored h already! chahe toh only id store bhi krwa skte baaki sb kuchh db query se bhi le skte h
@@ -78,7 +78,7 @@ userSchema.methods.generateAccessToken = function () {
   );
 };
 userSchema.methods.generateRefreshToken = function () {
-  jwt.sign(
+  return jwt.sign(
     {
       _id: this._id, // less info in refresh token
     },
