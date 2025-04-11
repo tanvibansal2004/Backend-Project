@@ -52,7 +52,7 @@ const userSchema = new Schema(
 // userSchema.pre("save", () => {}) // we want this hook to work before "save" functionality works // don't write like this because arrow function doesn't have context of super or this but we need all this userSchema attributes, therefore we follow another way!
 
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next(); // we want that this should change only when we changea dn save the password, otherwise this code will run every time something is saved, which we dont want!
+  if (!this.isModified("password")) return next(); // we want that this should change only when we change and save the password, otherwise this code will run every time something is saved, which we dont want!
 
   this.password = await bcrypt.hash(this.password, 10); // 2 arguments, what to encrypt, how many rounds of encryption
   next();

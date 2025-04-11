@@ -5,6 +5,7 @@ import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 // import { app } from "../app.js";
 import jwt from "jsonwebtoken";
+// import { syncIndexes } from "mongoose";
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -73,7 +74,9 @@ const registerUser = asyncHandler(async (req, res) => {
   // 4.
   // express gives us access to req.body - similarly since we have now added multer middleware in our route - it gives us access to req.files
   console.log(req.files);
-  const avatarLocalPath = req.files?.avatar[0]?.path; // first object le rhe h kyunki agar voh mila (optionally use kr rhe h to avoid errors) toh hume uska path jo multer ne upload kra h voh mil jaega!
+  const avatarLocalPath = req.files?.avatar[0]?.path;
+  // (not sure of this comment) fileS isilye likha h kyunki humne 2 fields set kiye h na - avatar and coverImage wala - otherwise file likhte toh bhi chalta?
+  // first object le rhe h kyunki agar voh mila (optionally use kr rhe h to avoid errors) toh hume uska path jo multer ne upload kra h voh mil jaega!
   // const coverImageLocalPath = req.files?.coverImage[0]?.path
 
   // to resolve scope issues of coverImageLocalPath
@@ -235,26 +238,25 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET
     );
-  
+
     const user = await User.findById(decodedToken?._id);
-  
+
     if (!user) {
       throw new ApiError(401, "Invalid Refresh Token!");
     }
-  
+
     if (incomingRefreshToken !== user?.refreshToken) {
       throw new ApiError(401, "Refresh Token is expired or used!");
     }
-  
+
     const options = {
       httpOnly: true,
       secure: true,
     };
-  
-    const { accessToken, newRefreshToken } = await generateAccessAndRefreshTokens(
-      user._id
-    );
-  
+
+    const { accessToken, newRefreshToken } =
+      await generateAccessAndRefreshTokens(user._id);
+
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
@@ -267,8 +269,129 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         )
       );
   } catch (error) {
-    throw new ApiError(401, error?.message || "Invalid Refresh Token!")
+    throw new ApiError(401, error?.message || "Invalid Refresh Token!");
   }
 });
 
-export { registerUser, loginUser, logoutUser , refreshAccessToken };
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  const user = await User.findById(req.user?._id);
+  const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+  if (!isPasswordCorrect) {
+    throw new ApiError(400, "Invalid Old Password!");
+  }
+
+  user.password = newPassword;
+  await user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password Changed Successfully!"));
+});
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "Current User Fetched Successfully!"));
+});
+
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  // what all details you let the user change depends on you - the developer!
+  // if you're letting them change any FILE - try to keep a separate controller!
+  const { fullName, email } = req.body; // req.body se le rhe h - req.body m hum data bhejte h (like during API Testing, we send through POSTMAN, then when the full stack is developed, it comes from frontend!)
+  if (!fullName || !email) {
+    throw new ApiError(400, "All Fields are Required!");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      // here we use MONGODB operators
+      $set: {
+        fullName: fullName, // aise bhi set kr skte h
+        email: email,
+        // and aise bhi - only fullName, email likhke chhod do!
+      },
+    },
+    { new: true } // this will return the user with the updated new details!
+  ).select("-password"); // agar yah nhi krte select, toh ek aur user._id krke query hit krte DB ko and then vaha se phir select krke remove kr dete pswd ko
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, req.user, "Account Details Updated Successfully!")
+    );
+}); // this was updating TEXT-BASED details!
+
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.path; // through MULTER middleware
+
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar File is Missing!");
+  }
+
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+  if (!avatar.url) {
+    throw new ApiError(500, "Something went wrong while uploading Avatar!");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        avatar: avatar.url,
+      },
+    },
+    {
+      new: true,
+    }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Avatar Updated Successfully!"));
+});
+
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+  const coverImageLocalPath = req.file?.path; // through MULTER middleware
+
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Cover Image File is Missing!");
+  }
+
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+  if (!coverImage.url) {
+    throw new ApiError(500, "Something went wrong while uploading Avatar!");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        coverImage: coverImage.url,
+      },
+    },
+    {
+      new: true,
+    }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Cover Image Updated Successfully!"));
+});
+
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImage,
+};
