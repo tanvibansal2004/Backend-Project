@@ -5,6 +5,7 @@ import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 // import { app } from "../app.js";
 import jwt from "jsonwebtoken";
+import mongoose, { mongo } from "mongoose";
 // import { syncIndexes } from "mongoose";
 
 const generateAccessAndRefreshTokens = async (userId) => {
@@ -384,6 +385,134 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "Cover Image Updated Successfully!"));
 });
 
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+  const { username } = req.params; // because we will get data from the url - jaha bhi yeh channel hume milega jis route p, uske params se data milega hume
+
+  if (!username?.trim()) {
+    throw new ApiError(400, "UserName is Missing!");
+  }
+
+  // now we could have done like this ki
+  // User.find({username}) but problem yeh h ki yaha p hum pehle database se user lenge poora, phir uski id k basis p aggregation lgaenge - which is unnecessary - we can do it directly since aggregation SAARE DOCUMENTS M SE HAMARI NEEDS KO MATCH {$match} krke de dega!
+
+  const channel = await User.aggregate([
+    {
+      $match: {
+        username: username?.toLowerCase(),
+      },
+    },
+    {
+      // pipeline for finding subscribers!
+      $lookup: {
+        from: "subscriptions", // model save hote time everything gets converted to lower case and becomes plural as well
+        localField: "_id",
+        foreignField: "channel", // basically this will help us in getting all the SUBSCRIBERS of a channel
+        as: "subscribers",
+      },
+    },
+    {
+      // pipeline for finding subscribers!
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber", // basically this will help us in getting all the CHANNELS a user has subscribed to
+        as: "subscribedTo",
+      },
+    },
+    {
+      // count pipeline
+      $addFields: {
+        subscribersCount: {
+          $size: "$subscribers",
+        },
+        channelsSubscribedToCount: {
+          $size: "$subscribedTo",
+        },
+        isSubscribed: {
+          // to check whether a user (current) is subscribed to a channel or not!
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] }, // yeh dkhna h ki jo subscribers document aaya h, usme current user h ya nhi for that particular channel!
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        // we'll not project all the values that rae demanded, we'll give selected values
+        fullName: 1, // jin jin ko bhi project krna h, uske aage 1 lga doooo
+        username: 1,
+        subscribersCount: 1,
+        channelsSubscribedToCount: 1,
+        isSubscribed: 1,
+        avatar: 1,
+        coverImage: 1,
+        email: 1,
+      },
+    },
+  ]); // aggregate takes an array, and then we write pipelines in it in the form of objects!
+  // the value that is returned from aggregation pipelines are Arrays!
+  console.log(channel); // just to know what aggregate return!
+
+  if (!channel?.length) {
+    throw new ApiError(404, "Channel doesn't Exist!!");
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, channel[0], "User Channel Fetched Successfully!")
+    ); // channel[0] means the first OBJECT (because channel is an array of objects - in our case it most probably HAS ONLY 1 OBJECT AT channel[0])
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user._id), // actually jo MONGODB m _id hoti h that is -> ObjectId('somestring') - ab mongoose jb kaam krta h, toh hume _id m seedha yeh string return kr deta h, thats why we don't have to take care of this - mongoose khud dkh leta h - but in this case of aggregation pipeline, mongoose doesn't really work, that's why we have to handle it right now!
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [ 
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              // why this pipeline? -> (maybe) so that we don't have to give/show/project ALL THE DETAILS OF THIS "OWNER"
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1
+                  }
+                }
+              ]
+            }
+          },
+          { // array return krne ki jagah seedha hi yeh addFields kr liya so that ab frontend p bss yeh field. krke mil jaega data, varna first object m se lena pdta array k and all...
+            $addFields: {
+              owner: { // owner ki exsiting feild ko hi overwrite krwa rhe h - doosre naam ki field bana k usse add bhi kr skte thhey
+                $first: "$owner"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]);
+
+  return res.status(200).json(new ApiResponse(200, user[0].watchHistory, "Watch History Fetched Successfully!"))
+});
+
 export {
   registerUser,
   loginUser,
@@ -394,4 +523,6 @@ export {
   updateAccountDetails,
   updateUserAvatar,
   updateUserCoverImage,
+  getUserChannelProfile,
+  getWatchHistory,
 };
